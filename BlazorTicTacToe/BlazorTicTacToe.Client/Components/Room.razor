@@ -1,0 +1,149 @@
+﻿@inject NavigationManager NavigationManager
+
+
+@if (CurrentRoom is not null)
+{
+    <div class="container mt-4">
+        <h3 class="text-center">@CurrentRoom.RoomName</h3>
+
+
+        @if (CurrentRoom.Players.Count < 2)
+        {
+            <div class="alert alert-info text-center">
+                Diğer oyuncuların katılması bekleniyor...
+            </div>
+        }
+
+        @if (!CurrentRoom.Game.GamerStarted && CurrentRoom.Game.PlayerXId != myPlayerId && CurrentRoom.Players.Count == 2)
+        {
+            <div class="alert alert-warning text-center">
+                Oda sahibinin oyunu başlatması bekleniyor...
+            </div>
+        }
+
+        @if (CurrentRoom.Game.GameOver && !CurrentRoom.Game.IsDraw)
+        {
+            <div class="alert alert-success text-center">
+                Oyun Bitti! Kazanan: <strong>@CurrentRoom.Game.Winner</strong>
+            </div>
+        }
+
+        @if (CurrentRoom.Game.GameOver && CurrentRoom.Game.IsDraw)
+        {
+            <div class="alert alert-secondary text-center">
+                Oyun Berabere Bitti!
+            </div>
+        }
+
+        @if ((!CurrentRoom.Game.GamerStarted || CurrentRoom.Game.GameOver) && CurrentRoom.Game.PlayerXId == myPlayerId && CurrentRoom.Players.Count == 2)
+        {
+            <div class="text-center mt-3">
+                <button class="btn btn-primary" @onclick="StartGame">Oyunu Başlat</button>
+            </div>
+        }
+
+        @if (CurrentRoom.Game.GamerStarted)
+        {
+            <h4 class="text-center mt-4">Oynama sırası @CurrentRoom.Game.CurrentPlayerSymbol sembollü oyuncuda.</h4>
+            <p class="text-center mb-4">
+                @CurrentRoom.Players[0].PlayerName (X),
+                @CurrentRoom.Players[1].PlayerName (O)
+            </p>
+
+            <div class="d-flex justify-content-center">
+                <table class="tic-tac-toe">
+                    @for (int row = 0; row < 3; row++)
+                    {
+                        <tr>
+                            @for (int col = 0; col < 3; col++)
+                            {
+                                var r = row;
+                                var c = col;
+
+                                <td @onclick="() => MakeMove(r,c)">
+                                    @CurrentRoom.Game.Board[r][c]
+                                </td>
+                            }
+                        </tr>
+                    }
+
+                </table>
+            </div>
+
+            @if (!IsMyTurn() && !CurrentRoom.Game.GameOver)
+            {
+                <div class="alert alert-info text-center mt-3">
+                    Rakibin hamle yapması bekleniyor...
+                </div>
+            }
+        }
+    </div>
+
+   
+
+
+}
+
+
+@code {
+
+    private string? myPlayerId;
+
+    [CascadingParameter]
+    public HubConnection? HubConnection { get; set; }
+
+    [Parameter]
+    public GameRoom? CurrentRoom { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (CurrentRoom is null || HubConnection is null || HubConnection.ConnectionId is null)
+        {
+            return;
+        }
+
+        myPlayerId = HubConnection.ConnectionId;
+
+        HubConnection.On<Player>("PlayerJoined", player =>
+        {
+            CurrentRoom.Players.Add(player);
+            StateHasChanged();
+        });
+
+        HubConnection.On<GameRoom>("UpdateGame", serverRoom =>
+        {
+            CurrentRoom = serverRoom;
+            StateHasChanged();
+        });
+    }
+
+    async Task StartGame()
+    {
+        if (HubConnection is null || CurrentRoom is null)
+        {
+            return;
+        }
+        await HubConnection.InvokeAsync("StartGame", CurrentRoom.RoomId);
+    }
+
+    private async Task MakeMove(int row, int col)
+    {
+        if (IsMyTurn() && CurrentRoom is not null && CurrentRoom.Game.GamerStarted && !CurrentRoom.Game.GameOver && HubConnection is not null)
+        {
+            await HubConnection.InvokeAsync("MakeMove", CurrentRoom.RoomId, row, col, myPlayerId);
+        }
+
+    }
+
+    
+
+    private bool IsMyTurn()
+    {
+        if (CurrentRoom is not null)
+        {
+            return myPlayerId == CurrentRoom.Game.CurrentPlayerId;
+        }
+        return false;
+
+    }
+}

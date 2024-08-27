@@ -1,0 +1,108 @@
+﻿@page "/"
+@inject NavigationManager NavigationManager
+@rendermode @(new InteractiveWebAssemblyRenderMode(false))
+
+
+@if (currentRoom is null)
+{
+ 
+   
+    <div class="container mt-4">
+        <h3 class="text-center">Tic Tac Toe'ya Hoşgeldiniz!</h3>
+        <div class="row justify-content-center">
+            <div class="col-md-6">
+                <div class="form-group mb-3">
+                    <input type="text" class="form-control" required @bind="playerName" placeholder="Adınız" />
+                </div>
+                <div class="form-group mb-3">
+                    <input type="text" class="form-control" @bind="currentRoomName" placeholder="Oda Adı" />
+                </div>
+                <button class="btn btn-primary" @onclick="CreateRoom">Oda Oluştur</button>
+            </div>
+        </div>
+
+        <h3 class="mt-4">Odalar:</h3>
+        <ul class="list-group">
+            @foreach (var room in rooms)
+            {
+                if (room.Players.Count == 1 || currentRoom.Players.Count == 2)
+                {
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        @room.RoomName
+                        <button class="btn btn-success btn-sm" @onclick="() => JoinRoom(room.RoomId)">Katıl</button>
+                    </li>
+                }
+               
+            }
+        </ul>
+    </div>
+
+
+
+}
+else
+{
+    
+    <CascadingValue Value="hubConnection">
+        <Room CurrentRoom="currentRoom" />
+    </CascadingValue>
+}
+@code {
+
+    private HubConnection? hubConnection;
+    private string playerName = string.Empty;
+    private string currentRoomName = string.Empty;
+    private GameRoom? currentRoom;
+    private List<GameRoom> rooms = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        hubConnection = new HubConnectionBuilder()
+             .WithUrl(NavigationManager.ToAbsoluteUri("/gamehub"))
+             .Build();
+
+        hubConnection.On<List<GameRoom>>("Rooms", (roomlist) =>
+        {
+          
+            rooms = roomlist;
+            StateHasChanged();
+        });
+
+        await hubConnection.StartAsync();
+    }
+
+    private async Task CreateRoom()
+    {
+        if (hubConnection is null)
+        {
+            return;
+        }
+
+       
+            currentRoom = await hubConnection.InvokeAsync<GameRoom>("CreateRoom",
+       currentRoomName,
+       playerName);
+        
+
+    }
+
+    private async Task JoinRoom(string roomId)
+    {
+        if (hubConnection is null)
+        {
+            return;
+        }
+        var joinedRoom = await hubConnection.InvokeAsync<GameRoom>("JoinRoom",
+         roomId,
+         playerName);
+
+        if (joinedRoom is not null)
+        {
+            currentRoom = joinedRoom;
+        }
+        else
+        {
+            Console.WriteLine("Oda dolu!");
+        }
+    }
+}
